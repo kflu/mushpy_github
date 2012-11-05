@@ -19,9 +19,11 @@ def expose(*args):
         if not callable(func):
             raise TypeError(func, 'Not callable')   #FIXME
         print "exposing func: %s with name: %s" % (str(func), name)
-        print 'expose(): global name space already has %s exposed.' % name
-        setattr(ax._scriptEngine_.globalNameSpaceModule, name, func.__call__)
-        setattr(func, 'global_name', name)
+        #setattr(ax._scriptEngine_.globalNameSpaceModule, name, func.__call__)
+        setattr(ax._scriptEngine_.globalNameSpaceModule, name, func)
+        # setattr doesn't work on instancemethod for python2.7
+        # setattr(func, 'global_name', name)
+        func.__func__.global_name = name
         return
 
     if len(args) == 1:

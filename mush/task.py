@@ -1,48 +1,87 @@
 from greenlet import greenlet
 from trigger import *
 from common import *
+from types import MethodType
 
 class Task(greenlet):
-    _func2pattern = {}
+    """Collection of triggers and a greenlet.
+
+    triggers are registered at instantiation. To define a trigger handler:
+
+        >>> @Task.trigger("pattern_regex")
+        >>> def onPattern(self, wildcards):
+        >>>     # wildcards is a length 10 array holding the wildcards
+        >>>     # The 10-th one is the whole line
+        >>>     pass
+
+    The coroutine should be defined in method "run" (refer to greenlet doc):
+
+        >>> def run(self, *args):
+        >>>     pass
+
+    To run it, run
+
+        >>> instance.switch(args)
+
+    """
+    _func2pattern = {} # func_name : trig_pattern
+
+    @classmethod
+    def trigger(cls, pattern):
+        def wrapper(func):
+            # Note that here "func" is a function rather than method In order
+            # to reference it later when class instantiates, we have to
+            # identify it by the name.
+            cls._func2pattern[func.__name__] = pattern
+            def newfunc(self, trig_name, line, wc):
+                # Bound the function object to class instance "self" and then
+                # invoke
+                MethodType(func, self, type(self))(wc)
+            return newfunc
+        return wrapper
 
     def __init__(self):
-        self._trig_state = {} # func : on/off
-        self._register_trigs()
+        super(Task, self).__init__()
+        self._trig_state = {} # func_name : on/off
+        self._register_trigs() 
+
+    def __getitem__(self, key):
+        '''Get bound method by its name'''
+        return getattr(self, key)
 
     def _register_trigs(self):
         for func in self._func2pattern:
-            class_name = func.im_class.__name__
-            func_name = func.im_func.__name__
-            global_name = "g__{0}__{1}__{2}".format(class_name, func_name, id(func))
-            expose(func, func.global_name)
-            add_trigger(name=func.global_name, pattern=self._func2pattern[func],
-                    script=func.global_name)
+            class_name = self.__class__.__name__
+            global_name = "g__{0}__{1}__{2}".format(class_name, func, id(self))
+            expose(self[func], global_name)
+            add_trigger(name=global_name, pattern=self._func2pattern[func],
+                    script=global_name)
 
     def enable_all(self, store_state=True):
         if store_state:
             self._store_trig_state()
         for func in self._func2pattern:
-            enable_trigger(name=func.global_name)
+            enable_trigger(name=self[func].global_name)
 
     def disable_all(self, store_state=True):
         if store_state:
             self._store_trig_state()
         for func in self._func2pattern:
-            disable_trigger(name=func.global_name)
+            disable_trigger(name=self[func].global_name)
 
     def delete_all(self):
         self.disable_all(store_state=False)
         for func in self._func2pattern:
-            del_trigger(name=func.global_name)
+            del_trigger(name=self[func].global_name)
 
     def _store_trig_state(self):
         self._trig_state = {}
         for func in self._func2pattern:
-            self._trig_state[func] = get_trig_onoff(name=func.global_name)
+            self._trig_state[func] = get_trig_onoff(name=self[func].global_name)
 
     def _resume_trig_state(self):
         for func in self._trig_state:
-            set_trig_onoff(func.global_name, self._trig_state[func])
+            set_trig_onoff(self[func].global_name, self._trig_state[func])
     resume = _resume_trig_state
 
     def _turn_onoff(self, func_or_list, on):
@@ -66,10 +105,4 @@ class Task(greenlet):
         self.resume()
         return result
 
-    @staticmethod
-    def trigger(pattern):
-        def wrapper(func):
-            Task._func2pattern[func] = pattern
-            return func
-        return wrapper
-
+maketrigger = Task.trigger

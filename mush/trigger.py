@@ -81,12 +81,17 @@ class Trigger:
     def __init__(self, name):
         if (world.istrigger(name) != ErrorNo.eOK):
             raise TriggerNotFoundError()
-        self.name = name
+        # avoid recursive calls into __setattr__ and __getattr__
+        self.__dict__["name"] = name
 
     def __getitem__(self, key):
-        return world.GetTriggerInfo(self.name, key.lower())
+        return world.GetTriggerInfo(self.name, self.TriggerInfoNames[key.lower()])
 
-    __getattr__ = __getitem__
+    def __getattr__(self, key):
+        if key in self.__dict__:
+            return self.__dict__[key]
+        else:
+            return self.__getitem__(key)
 
     def __setitem__(self, key, value):
         '''Set option to a trigger.
@@ -131,6 +136,13 @@ class Trigger:
         if key in self._boolean_opts:
             value = "y" if value == True else "n"
 
-        world.SetTriggerOption(self.name, key, value)
+        res = world.SetTriggerOption(self.name, key, value)
+        if res != ErrorNo.eOK:
+            raise TriggerOpError("Error setting trigger option: {0} {1} {2}".format(
+                self.name, key, value))
 
-    __setattr__ = __setitem__
+    def __setattr__(self, key, value):
+        if key in self.__dict__:
+            self.__dict__[key] = value
+        else:
+            self.__setitem__(key, value)
