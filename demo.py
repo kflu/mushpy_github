@@ -5,6 +5,7 @@ from mush.task import Task, maketrigger
 
 class TestTask(Task):
     def __init__(self):
+        # constructor is no necessary if it doesn't take additional arguments
         super(TestTask, self).__init__()
 
     @maketrigger("blah")
