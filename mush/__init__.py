@@ -20,6 +20,7 @@ def init(ax):
     import __builtin__
     __builtin__.ax = ax
     __builtin__.world = ax._scriptEngine_.globalNameSpaceModule.world
+    __builtin__.send = send
     world.note("Successfully loaded Mushpy")
 
     # redirect stdout and stderr
@@ -27,3 +28,5 @@ def init(ax):
     sys.stdout = Terminal(title='stdout', time_stamp=True)
     sys.stderr = sys.stdout
 
+def send(what):
+    world.send(what)
