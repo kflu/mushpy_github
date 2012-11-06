@@ -3,15 +3,24 @@ from trigger import *
 from common import *
 from types import MethodType
 
-# TODO need to have _func2pattern per each class rather than instance.
-# _func2pattern needs to be setup upon class creation
-
 def _get_main_greenlet():
     current = getcurrent()
     while current.parent != None:
         current = current.parent
     return current
 main = _get_main_greenlet()
+
+class _RegTrigMetaClass(type):
+    def __new__(cls, name, bases, attrs):
+        _func2pattern = {}
+        for key, value in attrs.iteritems():
+            try:
+                if callable(value) and "pattern" in dir(value):
+                    _func2pattern[key] = value.pattern
+            except AttributeError: # greenlet.run doesn't like dir() on it
+                pass
+        attrs["_func2pattern"] = _func2pattern
+        return super(RegTrigMetaClass, cls).__new__(cls, name, bases, attrs)
 
 class Task(greenlet):
     """Collection of triggers and a greenlet.
@@ -35,8 +44,11 @@ class Task(greenlet):
 
     """
 
+    __metaclass__ = _RegTrigMetaClass
+
     @classmethod
     def trigger(cls, pattern):
+        print cls, pattern
         def wrapper(func):
             # Note that here "func" is a function rather than method In order
             # to reference it later when class instantiates, we have to
@@ -51,7 +63,6 @@ class Task(greenlet):
 
     def __init__(self):
         super(Task, self).__init__()
-        self._func2pattern = {} # func_name : trig_pattern
         self._trig_state = {} # func_name : on/off
         self._register_trigs() 
 
@@ -60,18 +71,14 @@ class Task(greenlet):
         return getattr(self, key)
 
     def _register_trigs(self):
-        for func in dir(self):
+        #for func in dir(self):
+        for func in self._func2pattern:
             print func
-            try:
-                if callable(getattr(self, func)) and "pattern" in dir(getattr(self, func)):
-                    self._func2pattern[func] = getattr(self, func).pattern
-                    class_name = self.__class__.__name__
-                    global_name = "g__{0}__{1}__{2}".format(class_name, func, id(self))
-                    expose(self[func], global_name)
-                    add_trigger(name=global_name, pattern=self._func2pattern[func],
-                            script=global_name)
-            except AttributeError: # greelet.run doesn't like dir() on it
-                pass
+            class_name = self.__class__.__name__
+            global_name = "g__{0}__{1}__{2}".format(class_name, func, id(self))
+            expose(self[func], global_name)
+            add_trigger(name=global_name, pattern=self._func2pattern[func],
+                    script=global_name)
 
     def enable_all(self, store_state=True):
         if store_state:
@@ -126,3 +133,4 @@ class Task(greenlet):
         return main.switch()
 
 maketrigger = Task.trigger
+
